@@ -11,7 +11,7 @@ const LAB = {
   scope: 'Module 9',                    // used in sentences, e.g. "Modules 1–6"
   lead: 'Ten short web pages for Trailhead Coffee Roasters. Write the JavaScript that finds elements, changes them, and reacts to clicks, then submit and see exactly what to fix, with the proper code beside yours.',                      // one or two sentences under the title
   footer: 'CSIS 1280 · Multimedia Web Development',                  // footer text, e.g. "CSIS 1280 · Web Design"
-  storageKey: 'codeLab.trailhead-dom-lab.v1',         // unique per lab, so two labs never share progress
+  storageKey: 'codeLab.trailhead-dom-lab.v2',         // unique per lab, so two labs never share progress
   author: { name: 'Reza Ghaeli', url: 'https://github.com/RezaGhaeli' },                          // credit, e.g. { name: 'Reza Ghaeli', url: 'https://github.com/RezaGhaeli' }: home byline, footer, printed results
 
   logo: 'img/logo.png',                            // e.g. 'img/logo.png' (wide logo for the dark top bar)
@@ -49,6 +49,7 @@ const LAB = {
   exam: null,
 
   chromeOnly: false,                     // true: the lab opens only in Google Chrome (other browsers see a 'please use Chrome' page)
+  attempts: { max: 3, penalty: 10 },     // practice labs: 3 attempts per activity, attempt k worth (100 - 10k)% of its points; best attempt counts (null = unlimited)
   passMark: 80,                          // "redo anything below this" advice on the results page
   desktopWidth: 960,                     // width of the hidden grading frame for desktop checks
   phoneWidth: 400                        // width used for csN()/rectN() checks and the Phone preview

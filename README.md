@@ -18,6 +18,8 @@ the HTML and CSS are given, and students write `script.js`.
 | 10 | The Trailhead Dice Board | everything together (final-exam style) |
 
 Each activity also has two multiple-choice questions on the DOM ideas behind it.
+
+**Attempts:** 3 per activity. Each attempt takes 10% off the marks (attempt 1 up to 90%, attempt 2 up to 80%, attempt 3 up to 70%), and the best attempt counts. Set in `js/config.js` (`attempts`).
 Progress is saved in the student's browser (localStorage). No server, no accounts.
 
 **To change an activity:** edit `js/activities.js`, run `verify_lab.js` (code-lab-builder skill), then redeploy.

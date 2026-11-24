@@ -42,6 +42,21 @@
   /* Multiple-choice questions (a.quiz, practice labs only): answered under the code, graded with it on Submit, 1 point each. */
   const quizOf = a => !EXAM && Array.isArray(a.quiz) ? a.quiz : [];
   const picksOf = id => ((state.run.quiz || {})[id]) || [];
+  /* Limited attempts (LAB.attempts = { max: 3, penalty: 10 }, practice labs only): attempt k is worth
+     (100 - penalty × k)% of what it earns, a student has `max` attempts per activity, and the best attempt counts. */
+  const ATT = typeof LAB !== 'undefined' && !LAB.exam && LAB.attempts && LAB.attempts.max ? LAB.attempts : null;
+  const worth = k => Math.max(0, 100 - ((ATT && ATT.penalty) || 0) * k);   // % of the marks attempt k can earn
+  const usedOf = id => (state.run.results[id] && state.run.results[id].attempts) || 0;
+  const attemptsLeft = id => ATT ? Math.max(0, ATT.max - usedOf(id)) : Infinity;
+  const r1 = x => Math.round(x * 10) / 10;
+  const attemptRule = () => ATT ? `You have <strong>${ATT.max} attempts</strong> per activity. Each attempt takes ${ATT.penalty}% off the marks (attempt ${Array.from({ length: ATT.max }, (_, i) => `${i + 1}: up to ${worth(i + 1)}%`).join(', ')}), and your best attempt counts.` : '';
+  const submitNote = a => {
+    if (!ATT) return `Happy with it? Submit to see your score, your mistakes, and the proper code.${quizOf(a).length ? ' Your quiz answers are marked too.' : ''}`;
+    const k = usedOf(a.id) + 1, r = result(a.id);
+    if (!attemptsLeft(a.id)) return `You have used all ${ATT.max} attempts. Your counted mark for this activity is <strong>${r.score}%</strong> (your best attempt).`;
+    return `<strong>Attempt ${k} of ${ATT.max}</strong>: this attempt can earn up to <strong>${worth(k)}%</strong> of the marks. Each attempt takes ${ATT.penalty}% off, and your best attempt counts${r ? ` (so far: ${r.score}%)` : ''}. Check your page against the goal before you submit.${quizOf(a).length ? ' Your quiz answers are marked too.' : ''}`;
+  };
+  const submitLabel = a => !ATT ? (result(a.id) ? 'Submit again' : `Submit Activity ${a.id}`) : !attemptsLeft(a.id) ? 'No attempts left' : `Submit attempt ${usedOf(a.id) + 1} of ${ATT.max}`;
 
   /* ---------------------------------------------------------------- helpers */
   const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -148,7 +163,7 @@
       <ol class="how-list">
         ${(LAB.how || []).map((h, i) => `<li>${art(h.img, 'how-art', String(i + 1))}<strong>${esc(h.title)}</strong><span>${esc(h.text)}</span></li>`).join('')}
       </ol>
-      <p class="muted">Submit an activity to unlock the next one. You can redo any activity, and start the whole lab again as many times as you like.${LAB.guide ? ` New here? Read the <a href="${LAB.guide}" target="_blank" rel="noopener">student guide</a> first.` : ''}</p>
+      <p class="muted">${ATT ? 'Submit an activity to unlock the next one. ' + attemptRule() : 'Submit an activity to unlock the next one. You can redo any activity, and start the whole lab again as many times as you like.'}${LAB.guide ? ` New here? Read the <a href="${LAB.guide}" target="_blank" rel="noopener">student guide</a> first.` : ''}</p>
     </section>
 
     <section class="cards-grid">
@@ -283,8 +298,8 @@
         ${quizBlock(a)}
 
         ${SW ? swNav(a) : EXAM ? examNav(a) : `<div class="submit-row">
-          <p class="muted">Happy with it? Submit to see your score, your mistakes, and the proper code.${quizOf(a).length ? ' Your quiz answers are marked too.' : ''}</p>
-          <button class="btn primary big" id="submitBtn">Submit Activity ${a.id}</button>
+          <p class="muted" id="submitNote">${submitNote(a)}</p>
+          <button class="btn primary big" id="submitBtn"${attemptsLeft(a.id) ? '' : ' disabled'}>${submitLabel(a)}</button>
         </div>`}
 
         <section id="report" class="report" tabindex="-1" hidden></section>
@@ -425,6 +440,7 @@
 
   async function submit(a) {
     const btn = $('#submitBtn');
+    if (ATT && !attemptsLeft(a.id)) return;
     btn.disabled = true; btn.textContent = 'Checking…';
     const files = current();
     const g = await Checker.grade(a, files);
@@ -440,15 +456,33 @@
       r.score = Math.round(100 * r.earned / r.total);
     }
     if (g.run) { lastRuns[a.id] = g.run; r.output = { out: g.run.out.slice(0, 6000), err: g.run.err.slice(0, 1500), error: g.run.error, line: g.run.line, nfigs: g.run.figs.length }; }
+    if (ATT) {                                       // this attempt is worth (100 - penalty × k)%; the best attempt counts
+      const raw = r.score, k = r.attempts, w = worth(k), mark = r1(raw * w / 100);
+      const tries = (prev && prev.tries ? prev.tries : []).concat([{ raw, worth: w, mark, earned: r.earned, total: r.total, at: r.at }]);
+      const best = tries.reduce((b, t, i) => t.mark > tries[b].mark ? i : b, 0);
+      Object.assign(r, { raw, worth: w, mark, markEarned: r1(r.earned * w / 100), tries, best, score: tries[best].mark });
+    }
     state.run.results[a.id] = r; save();
-    btn.disabled = false; btn.textContent = 'Submit again';
+    btn.textContent = submitLabel(a); btn.disabled = !attemptsLeft(a.id);
+    if ($('#submitNote')) $('#submitNote').innerHTML = submitNote(a);
     renderStepper(a.id);
     report(a, r, true);
   }
 
   function report(a, r, focus) {
     const el = $('#report');
-    const [title, sub] = verdict(r.score);
+    const pen = ATT && r.tries;                      // a limited-attempts result: the head shows how correct the work is, the box shows the mark
+    const correct = pen ? r.raw : r.score;
+    const [title, sub] = verdict(correct);
+    const nLeft = attemptsLeft(a.id);
+    const attemptBox = !pen ? '' : `
+      <div class="attempt-box">
+        <p><strong>Attempt ${r.attempts} of ${ATT.max}</strong> (worth up to ${r.worth}%): ${correct}% correct × ${r.worth}% = <strong>${r.mark}%</strong> of the marks (${r.markEarned} of ${r.total} points).</p>
+        <p>Counted mark for this activity (your best attempt): <strong>${r.score}%</strong>. ${nLeft ? `You have <strong>${nLeft} attempt${nLeft === 1 ? '' : 's'} left</strong>; the next one can earn up to ${worth(r.attempts + 1)}%.` : 'You have no attempts left for this activity.'}</p>
+        ${r.tries.length > 1 ? `<table class="attempt-table"><thead><tr><th>Attempt</th><th>Correct</th><th>Worth up to</th><th>Mark</th></tr></thead><tbody>
+          ${r.tries.map((t, i) => `<tr${i === r.best ? ' class="counted"' : ''}><td>${i + 1}</td><td>${t.raw}%</td><td>${t.worth}%</td><td>${t.mark}%${i === r.best ? ' (counted)' : ''}</td></tr>`).join('')}
+        </tbody></table>` : ''}
+      </div>`;
     const files = r.files || { html: r.html, css: r.css, js: r.js };
     const d = diff(files[a.edit] || '', a.solution[a.edit] || '');
     const failed = a.checks.map((c, i) => ({ c, ok: r.passed[i], found: r.found[i] })).filter(x => !x.ok);
@@ -457,13 +491,14 @@
     el.hidden = false;
     el.innerHTML = `
       <div class="report-head">
-        ${ring(r.score)}
+        ${ring(correct)}
         <div>
-          <p class="kicker">Activity ${a.id} result · attempt ${r.attempts}</p>
-          <h2>${title}: ${r.score}%</h2>
-          <p>${sub} You earned <strong>${r.earned} of ${r.total}</strong> points.</p>
+          <p class="kicker">Activity ${a.id} result · attempt ${r.attempts}${ATT ? ' of ' + ATT.max : ''}</p>
+          <h2>${title}: ${correct}%${pen ? ' correct' : ''}</h2>
+          <p>${sub} You earned <strong>${r.earned} of ${r.total}</strong> points${pen ? ' before the attempt deduction' : ''}.</p>
         </div>
       </div>
+      ${attemptBox}
 
       ${failed.length ? `<h3 class="bad-h">What to fix (${failed.length})</h3>
       <ol class="results">${failed.map(x => `
@@ -499,7 +534,7 @@
       </div>
 
       <div class="report-actions">
-        <button class="btn ghost" id="retryBtn">Try this activity again</button>
+        ${nLeft ? `<button class="btn ghost" id="retryBtn">${ATT ? `Try again (attempt ${r.attempts + 1}, up to ${worth(r.attempts + 1)}%)` : 'Try this activity again'}</button>` : ''}
         <a class="btn primary big" href="${last ? '#/summary' : '#/activity/' + (a.id + 1)}">${last ? 'See my final results →' : 'Next: Activity ' + (a.id + 1) + ' →'}</a>
       </div>`;
     if (PY) goalRun(a).then(g => { const el = $('#goalOut'); if (el) el.innerHTML = pyOutput(g); });
@@ -507,7 +542,7 @@
       $('#mineFrame').srcdoc = Checker.compose(files.html, files.css, files.js, pageOpts(a));
       $('#goalFrame').srcdoc = Checker.compose(a.solution.html, a.solution.css, a.solution.js, pageOpts(a));
     }
-    $('#retryBtn').addEventListener('click', () => { window.scrollTo({ top: 0, behavior: 'smooth' }); editors()[a.edit].focus(); });
+    if ($('#retryBtn')) $('#retryBtn').addEventListener('click', () => { window.scrollTo({ top: 0, behavior: 'smooth' }); editors()[a.edit].focus(); });
     if (focus) { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); el.focus({ preventScroll: true }); }
   }
 
@@ -536,19 +571,20 @@
           <p class="kicker">Full cycle · Run ${state.run.n} complete</p>
           <h1>${esc(state.name ? state.name + ', y' : 'Y')}ou finished the ${esc(LAB.title)}!</h1>
           <div class="summary-score">${ring(p, 150)}<div><h2>${title}</h2><p>${sub}</p>
-            <p class="muted">Approximate overall score${LAB.scope ? ' across ' + esc(LAB.scope) : ''}.${best ? ` Your best earlier run: ${best}%.` : ''}</p></div></div>
+            <p class="muted">${ATT ? `Overall mark${LAB.scope ? ' across ' + esc(LAB.scope) : ''}, after the attempt deductions.` : `Approximate overall score${LAB.scope ? ' across ' + esc(LAB.scope) : ''}.`}${best ? ` Your best earlier run: ${best}%.` : ''}</p></div></div>
         </div>
       </div>
-      <h2>Score by activity</h2>
+      <h2>${ATT ? 'Mark by activity' : 'Score by activity'}</h2>
+      ${ATT ? `<p class="muted">${attemptRule()} Each bar shows the counted mark.</p>` : ''}
       ${bars()}
       ${weakest.length ? `<div class="advice"><h3>Where to practise next</h3><ul>${weakest.map(a => `<li><a href="#/activity/${a.id}">Activity ${a.id}: ${esc(a.title)}</a>: ${result(a.id).score}% (${esc(a.module)}, ${esc(a.topic)})${result(a.id).score < pass ? ' · below ' + pass + '%' : ''}</li>`).join('')}</ul></div>` : ''}
       <div class="report-actions">
         <button class="btn ghost" onclick="window.print()">Print or save as PDF</button>
-        <button class="btn primary big" id="newRun">Start the lab again</button>
+        ${ATT ? '' : '<button class="btn primary big" id="newRun">Start the lab again</button>'}
       </div>
-      <p class="muted print-note">Printed ${new Date().toLocaleString()} · ${esc(state.name || 'Student')} · Run ${state.run.n}${LAB.author && LAB.author.name ? ` · ${esc(LAB.title)} by ${esc(LAB.author.name)}${LAB.author.url ? ' (' + esc(LAB.author.url) + ')' : ''}` : ''}</p>
+      <p class="muted print-note">Printed ${new Date().toLocaleString()} · ${esc(state.name || 'Student')} · Run ${state.run.n}${ATT ? ` · ${ATT.max} attempts per activity, ${ATT.penalty}% off per attempt, best attempt counts` : ''}${LAB.author && LAB.author.name ? ` · ${esc(LAB.title)} by ${esc(LAB.author.name)}${LAB.author.url ? ' (' + esc(LAB.author.url) + ')' : ''}` : ''}</p>
     </section>`;
-    $('#newRun').addEventListener('click', () => {
+    if ($('#newRun')) $('#newRun').addEventListener('click', () => {
       if (!confirm('Start a new run? This run’s scores are saved in your history, and every activity starts fresh.')) return;
       state.history.push({ n: state.run.n, finished: new Date().toISOString(), overall: p, scores: ACTIVITIES.map(a => result(a.id).score) });
       state.run = newRun(state.run.n + 1); save(); go('#/activity/1');
@@ -556,7 +592,7 @@
   }
   function bars() {
     return `<ol class="bars">${ACTIVITIES.map(a => { const r = result(a.id); const s = r ? r.score : 0; return `
-      <li><a href="${unlocked(a.id) ? '#/activity/' + a.id : '#/'}"><span class="b-label">${a.id}. ${esc(a.title)} <em>${esc(a.module)}</em></span>
+      <li><a href="${unlocked(a.id) ? '#/activity/' + a.id : '#/'}"><span class="b-label">${a.id}. ${esc(a.title)} <em>${esc(a.module)}${ATT && r && r.tries ? ` · ${r.tries.map(t => t.mark + '%').join(' / ')} (attempt ${r.best + 1} counts)` : ''}</em></span>
       <span class="b-track"><span class="b-fill ${r ? band(s) : 'none'}" style="width:${s}%"></span></span>
       <span class="b-val">${r ? s + '%' : '–'}</span></a></li>`; }).join('')}</ol>`;
   }
