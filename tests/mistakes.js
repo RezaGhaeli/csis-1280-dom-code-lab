@@ -1,0 +1,36 @@
+/* Realistic student mistakes: verify_lab.js applies each to the proper code and checks that it loses points. */
+const swapJs = (from, to) => f => ({ ...f, js: f.js.replace(from, to) });
+const MISTAKES = {
+  1: [['# in getElementById', swapJs('document.getElementById("special")', 'document.getElementById("#special")')],
+      ['textContent for the HTML note', swapJs('noteText.innerHTML =', 'noteText.textContent =')],
+      ['textcontent in lower case', swapJs('priceText.textContent = "$5.25";', 'priceText.textcontent = "$5.25";')]],
+  2: [['querySelector instead of querySelectorAll', swapJs('const items = document.querySelectorAll(".menu li");', 'const items = document.querySelector(".menu li");')],
+      ['count typed by hand', swapJs('document.getElementById("itemCount").textContent = items.length;', 'document.getElementById("itemCount").textContent = 6;')],
+      ['class selector without the dot', swapJs('document.querySelectorAll(".menu .new")', 'document.querySelectorAll(".menu new")')]],
+  3: [['font-size with a dash', swapJs('roastTitle.style.fontSize = "32px";', 'roastTitle.style.font-size = "32px";')],
+      ['dot in classList.add', swapJs('ethiopia.classList.add("featured");', 'ethiopia.classList.add(".featured");')],
+      ['info not removed', swapJs('message.classList.remove("info");\n', '')]],
+  4: [['old classes not removed', swapJs('  messageText.classList.remove("info", "too-many", "too-few", "win", "lose");\n', '')],
+      ['picture typed by hand', swapJs('jarImage.src = `img/jar-${type}.png`;', 'jarImage.src = "img/jar-too-many.png";')],
+      ['alt not changed', swapJs('  jarImage.alt = text;\n', '')]],
+  5: [['brackets in addEventListener', swapJs('serveButton.addEventListener("click", serveCup);', 'serveButton.addEventListener("click", serveCup());')],
+      ['reset changes only the text', swapJs('function resetCups() {\n  cups = 0;\n  cupCount.textContent = cups;', 'function resetCups() {\n  cupCount.textContent = 0;')],
+      ['cups made inside the function', f => ({ ...f, js: f.js.replace('let cups = 0;\n', '').replace('function serveCup() {\n  cups = cups + 1;', 'function serveCup() {\n  let cups = 0;\n  cups = cups + 1;') })]],
+  6: [['forgot Number()', swapJs('const amount = Number(amountInput.value);', 'const amount = amountInput.value;')],
+      ['box not cleared', swapJs('  amountInput.value = "";\n', '')],
+      ['message before the new total', f => ({ ...f, js: f.js.replace('  stock = stock + amount;\n  stockText.textContent = stock;\n  messageText.textContent = `Added ${amount} g. Stock is now ${stock} g.`;', '  messageText.textContent = `Added ${amount} g. Stock is now ${stock} g.`;\n  stock = stock + amount;\n  stockText.textContent = stock;') })]],
+  7: [['empty box not checked', swapJs('if (tempInput.value === "" || temp < 0 || temp > 100) {', 'if (temp < 0 || temp > 100) {')],
+      ['<= instead of <', swapJs('} else if (temp < 90) {', '} else if (temp <= 90) {')],
+      ['disables on every check', f => ({ ...f, js: f.js.replace('    tempInput.disabled = true;\n    checkButton.disabled = true;\n  }\n}', '  }\n  tempInput.disabled = true;\n  checkButton.disabled = true;\n}') })]],
+  8: [['forgot appendChild', swapJs('  orderList.appendChild(item);\n', '')],
+      ['no empty-box check', swapJs('  if (drink === "") {\n    return;\n  }\n', '')],
+      ['clear does not reset the count', swapJs('  orderList.innerHTML = "";\n  orders = 0;\n', '  orderList.innerHTML = "";\n')]],
+  9: [['brackets in setInterval', swapJs('setInterval(updateClock, 1000);', 'setInterval(updateClock(), 1000);')],
+      ['<= 18 for open hours', swapJs('if (hour >= 7 && hour < 18) {', 'if (hour >= 7 && hour <= 18) {')],
+      ['open class never removed', swapJs('    statusText.classList.remove("open");\n', '')]],
+  10: [['Math.round instead of floor', swapJs('return Math.floor(Math.random() * 6) + 1;', 'return Math.round(Math.random() * 6) + 1;')],
+       ['> 8 instead of >= 8', swapJs('if (total >= 8) {', 'if (total > 8) {')],
+       ['old classes not removed', swapJs('  messageText.classList.remove("info", "won", "lost");\n  if', '  if')],
+       ['new game keeps the history', swapJs('  historyList.innerHTML = "";\n', '')]]
+};
+if (typeof module !== 'undefined') module.exports = MISTAKES;
